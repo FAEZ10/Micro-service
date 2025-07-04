@@ -240,7 +240,6 @@ public class OrderService {
             log.debug("Commande {} non trouvée", orderId);
             return false;
         }
-        t
         
         try {
 

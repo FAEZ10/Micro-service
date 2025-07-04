@@ -1,5 +1,8 @@
 package com.microcommerce.products.kafka.consumer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.microcommerce.products.kafka.event.OrderEvent;
+import com.microcommerce.products.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -14,13 +17,16 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class OrderEventConsumer {
 
+    private final ProductService productService;
+    private final ObjectMapper objectMapper;
+
     @KafkaListener(
         topics = "order-events",
         groupId = "products-service-group",
         containerFactory = "kafkaListenerContainerFactory"
     )
     public void handleOrderEvent(
-            @Payload Object event,
+            @Payload String eventPayload,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.RECEIVED_KEY) Object key,
@@ -28,21 +34,69 @@ public class OrderEventConsumer {
         
         try {
             log.info("Received order event from topic: {}, partition: {}, key: {}", topic, partition, key);
-            log.debug("Order event payload: {}", event);
+            log.debug("Order event payload: {}", eventPayload);
 
-            // Ici on pourrait implémenter la logique pour :
-            // - Réserver du stock lors de la validation d'une commande
-            // - Libérer du stock lors de l'annulation d'une commande
-            // - Mettre à jour les statistiques de vente des produits
-            // - Déclencher des alertes de stock faible
+            // Désérialiser l'événement
+            OrderEvent orderEvent = objectMapper.readValue(eventPayload, OrderEvent.class);
+            
+            // Traiter l'événement selon son type
+            processOrderEvent(orderEvent);
 
             // Acknowledge successful processing
             acknowledgment.acknowledge();
-            log.debug("Successfully processed order event from topic: {}", topic);
+            log.info("Successfully processed order event: {} for order ID: {}", 
+                    orderEvent.getEventType(), orderEvent.getOrderId());
 
         } catch (Exception e) {
-            log.error("Error processing order event from topic: {}", topic, e);
+            log.error("Error processing order event from topic: {}, payload: {}", topic, eventPayload, e);
             // Don't acknowledge - message will be retried
+        }
+    }
+
+    /**
+     * Traite l'événement de commande selon son type
+     */
+    private void processOrderEvent(OrderEvent orderEvent) {
+        if (orderEvent.getItems() == null || orderEvent.getItems().isEmpty()) {
+            log.warn("Événement de commande sans articles: {}", orderEvent.getEventType());
+            return;
+        }
+
+        switch (orderEvent.getEventType()) {
+            case "ORDER_CONFIRMED":
+                log.info("Traitement de la confirmation de commande ID: {}", orderEvent.getOrderId());
+                productService.processOrderStockReduction(orderEvent.getItems(), orderEvent.getOrderId());
+                break;
+                
+            case "ORDER_CANCELLED":
+                log.info("Traitement de l'annulation de commande ID: {}", orderEvent.getOrderId());
+                productService.restoreOrderStock(orderEvent.getItems(), orderEvent.getOrderId());
+                break;
+                
+            case "ORDER_CREATED":
+                log.debug("Commande créée ID: {} - Aucune action sur le stock nécessaire", orderEvent.getOrderId());
+                // Pas d'action sur le stock lors de la création
+                break;
+                
+            case "ORDER_UPDATED":
+                log.debug("Commande mise à jour ID: {} - Traitement spécifique requis", orderEvent.getOrderId());
+                // TODO: Implémenter la logique pour les mises à jour de commande
+                // Cela pourrait nécessiter de comparer l'ancien et le nouveau contenu
+                break;
+                
+            case "ITEM_ADDED":
+                log.debug("Article ajouté à la commande ID: {}", orderEvent.getOrderId());
+                // Pas d'action sur le stock tant que la commande n'est pas confirmée
+                break;
+                
+            case "ITEM_REMOVED":
+                log.debug("Article retiré de la commande ID: {}", orderEvent.getOrderId());
+                // Pas d'action sur le stock tant que la commande n'est pas confirmée
+                break;
+                
+            default:
+                log.warn("Type d'événement de commande non géré: {} pour commande ID: {}", 
+                        orderEvent.getEventType(), orderEvent.getOrderId());
         }
     }
 }

@@ -1,5 +1,6 @@
 package com.microcommerce.orders.kafka.consumer;
 
+import com.microcommerce.orders.kafka.event.ClientEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -20,7 +21,7 @@ public class ClientEventConsumer {
         containerFactory = "kafkaListenerContainerFactory"
     )
     public void handleClientEvent(
-            @Payload Object event,
+            @Payload ClientEvent event,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.RECEIVED_KEY) Object key,
@@ -28,6 +29,8 @@ public class ClientEventConsumer {
         
         try {
             log.info("Received client event from topic: {}, partition: {}, key: {}", topic, partition, key);
+            log.info("Client event details - Type: {}, ClientId: {}, Email: {}", 
+                    event.getEventType(), event.getClientId(), event.getEmail());
             log.debug("Client event payload: {}", event);
 
             // Ici on pourrait implémenter la logique pour :

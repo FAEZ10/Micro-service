@@ -1,7 +1,9 @@
 package com.microcommerce.products.controller;
 
 import com.microcommerce.products.dto.response.ProductResponse;
+import com.microcommerce.products.dto.response.StockHistoryResponse;
 import com.microcommerce.products.dto.response.ErrorResponse;
+import com.microcommerce.products.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -30,6 +32,8 @@ import java.util.List;
 @Slf4j
 @Tag(name = "Catalogue de produits", description = "API publique pour consulter le catalogue de produits")
 public class ProductController {
+
+    private final ProductService productService;
 
     @Operation(
         summary = "Lister tous les produits",
@@ -218,6 +222,152 @@ public class ProductController {
         }
         
         return ResponseEntity.ok(product);
+    }
+
+    @Operation(
+        summary = "Obtenir l'historique de stock d'un produit",
+        description = """
+            Récupère l'historique paginé des mouvements de stock pour un produit spécifique.
+            
+            **Accès :** Public (aucune authentification requise)
+            
+            **Paramètres de pagination :**
+            - `page` : Numéro de page (commence à 0)
+            - `size` : Nombre d'éléments par page (max 100)
+            - `sort` : Tri par propriété avec direction (ex: createdAt,desc)
+            
+            **Propriétés de tri disponibles :**
+            - `id` : ID de l'entrée d'historique
+            - `createdAt` : Date de création (par défaut)
+            - `movementType` : Type de mouvement
+            - `quantity` : Quantité
+            - `previousStock` : Stock précédent
+            - `newStock` : Nouveau stock
+            - `orderId` : ID de commande
+            
+            **Types de mouvements :**
+            - `ORDER_REDUCTION` : Réduction suite à validation de commande
+            - `ORDER_CANCELLATION` : Restauration suite à annulation de commande
+            - `MANUAL_ADJUSTMENT` : Ajustement manuel du stock
+            - `INBOUND` : Entrée de stock
+            - `OUTBOUND` : Sortie de stock
+            - `ADJUSTMENT` : Ajustement de stock
+            """
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Historique de stock récupéré avec succès",
+            content = @Content(
+                schema = @Schema(implementation = Page.class),
+                examples = @ExampleObject(
+                    name = "Exemple d'historique",
+                    description = "Page d'historique de stock avec pagination",
+                    value = """
+                    {
+                      "content": [
+                        {
+                          "id": 1,
+                          "productId": 1,
+                          "movementType": "ORDER_REDUCTION",
+                          "movementTypeDescription": "Réduction suite à validation de commande",
+                          "quantity": 2,
+                          "previousStock": 52,
+                          "newStock": 50,
+                          "orderId": 123,
+                          "reason": "Réduction automatique suite à validation commande #123",
+                          "createdAt": "2025-01-07T10:30:00"
+                        },
+                        {
+                          "id": 2,
+                          "productId": 1,
+                          "movementType": "INBOUND",
+                          "movementTypeDescription": "Entrée de stock",
+                          "quantity": 10,
+                          "previousStock": 42,
+                          "newStock": 52,
+                          "orderId": null,
+                          "reason": "Réapprovisionnement stock",
+                          "createdAt": "2025-01-06T14:15:00"
+                        }
+                      ],
+                      "pageable": {
+                        "pageNumber": 0,
+                        "pageSize": 20,
+                        "sort": {
+                          "sorted": true,
+                          "empty": false
+                        }
+                      },
+                      "totalElements": 2,
+                      "totalPages": 1,
+                      "first": true,
+                      "last": true
+                    }
+                    """
+                )
+            )
+        ),
+        @ApiResponse(
+            responseCode = "404",
+            description = "Produit non trouvé",
+            content = @Content(
+                schema = @Schema(implementation = ErrorResponse.class),
+                examples = @ExampleObject(
+                    name = "Produit non trouvé",
+                    value = """
+                    {
+                      "code": "PRODUCT_NOT_FOUND",
+                      "message": "Le produit avec l'ID 999 n'existe pas",
+                      "timestamp": "2025-01-07T10:00:00",
+                      "path": "/api/v1/products/999/stock-history",
+                      "status": 404
+                    }
+                    """
+                )
+            )
+        ),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Paramètres de tri invalides",
+            content = @Content(
+                schema = @Schema(implementation = ErrorResponse.class),
+                examples = @ExampleObject(
+                    name = "Erreur de tri",
+                    description = "Propriété de tri invalide",
+                    value = """
+                    {
+                      "code": "INVALID_SORT_PROPERTY",
+                      "message": "Propriété de tri invalide pour l'historique. Utilisez: id, createdAt, movementType, quantity, previousStock, newStock, orderId",
+                      "timestamp": "2025-01-07T10:00:00",
+                      "path": "/api/v1/products/1/stock-history",
+                      "status": 400
+                    }
+                    """
+                )
+            )
+        )
+    })
+    @GetMapping("/{id}/stock-history")
+    public ResponseEntity<Page<StockHistoryResponse>> getProductStockHistory(
+            @Parameter(description = "ID du produit", required = true, example = "1")
+            @PathVariable Long id,
+            @Parameter(description = "Numéro de page (commence à 0)", example = "0")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Taille de la page", example = "20")
+            @RequestParam(defaultValue = "20") int size,
+            @Parameter(description = "Tri (format: propriété,direction)", example = "createdAt,desc")
+            @RequestParam(defaultValue = "createdAt,desc") String sort) {
+        
+        log.info("Récupération de l'historique de stock pour le produit ID: {}, page: {}, size: {}, sort: {}", 
+                id, page, size, sort);
+        
+        Page<StockHistoryResponse> stockHistory = productService.getProductStockHistory(id, page, size, sort);
+        
+        log.info("Historique de stock récupéré avec succès pour le produit ID: {}, {} entrées trouvées", 
+                id, stockHistory.getTotalElements());
+        
+        return ResponseEntity.ok(stockHistory);
     }
 
     // Méthode utilitaire pour créer des données de test

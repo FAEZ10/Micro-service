@@ -65,6 +65,25 @@ INSERT INTO categories (name, description, parent_id) VALUES
 ('Women', 'Women clothing', 2),
 ('Children', 'Children clothing', 2);
 
+-- Table pour l'historique des mouvements de stock
+CREATE TABLE stock_history (
+    id BIGSERIAL PRIMARY KEY,
+    product_id BIGINT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    movement_type VARCHAR(20) NOT NULL CHECK (movement_type IN ('ORDER_REDUCTION', 'ORDER_CANCELLATION', 'MANUAL_ADJUSTMENT', 'INBOUND', 'OUTBOUND', 'ADJUSTMENT')),
+    quantity INTEGER NOT NULL,
+    previous_stock INTEGER NOT NULL,
+    new_stock INTEGER NOT NULL,
+    order_id BIGINT, -- Référence à la commande (nullable pour ajustements manuels)
+    reason VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Index pour optimiser les requêtes sur l'historique
+CREATE INDEX idx_stock_history_product ON stock_history(product_id);
+CREATE INDEX idx_stock_history_order ON stock_history(order_id);
+CREATE INDEX idx_stock_history_type ON stock_history(movement_type);
+CREATE INDEX idx_stock_history_created ON stock_history(created_at);
+
 INSERT INTO products (name, description, price, stock_available, category_id, sku, image_url) VALUES
 ('iPhone 15 Pro', 'Apple iPhone 15 Pro 128GB Smartphone', 1199.99, 50, 6, 'APPLE-IP15P-128', '/images/iphone15pro.jpg'),
 ('Samsung Galaxy S24', 'Samsung Galaxy S24 256GB Smartphone', 899.99, 30, 6, 'SAMSUNG-GS24-256', '/images/galaxys24.jpg'),
