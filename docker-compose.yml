@@ -1,0 +1,203 @@
+services:
+  # PostgreSQL Databases
+  postgres-clients:
+    image: postgres:15
+    container_name: postgres-clients
+    environment:
+      POSTGRES_DB: microcommerce_clients
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_clients_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init-clients.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - microcommerce-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-products:
+    image: postgres:15
+    container_name: postgres-products
+    environment:
+      POSTGRES_DB: microcommerce_products
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_products_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init-products.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - microcommerce-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-orders:
+    image: postgres:15
+    container_name: postgres-orders
+    environment:
+      POSTGRES_DB: microcommerce_orders
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_orders_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init-orders.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - microcommerce-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Kafka
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - microcommerce-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+    networks:
+      - microcommerce-network
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "kafka:9092", "--list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Microservices (à activer progressivement)
+  clients-service:
+    build: ./clients-service
+    container_name: clients-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_HOST: postgres-clients
+      DB_PORT: 5432
+      DB_NAME: microcommerce_clients
+      DB_USERNAME: postgres
+      DB_PASSWORD: password
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: your-very-long-secret-key-here-must-be-at-least-256-bits-long-for-security
+    depends_on:
+      postgres-clients:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - microcommerce-network
+    restart: unless-stopped
+
+  products-service:
+    build: ./products-service
+    container_name: products-service
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_HOST: postgres-products
+      DB_PORT: 5432
+      DB_NAME: microcommerce_products
+      DB_USERNAME: postgres
+      DB_PASSWORD: password
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: your-very-long-secret-key-here-must-be-at-least-256-bits-long-for-security
+    depends_on:
+      postgres-products:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - microcommerce-network
+    restart: unless-stopped
+
+  orders-service:
+    build: ./orders-service
+    container_name: orders-service
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_HOST: postgres-orders
+      DB_PORT: 5432
+      DB_NAME: microcommerce_orders
+      DB_USERNAME: postgres
+      DB_PASSWORD: password
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: your-very-long-secret-key-here-must-be-at-least-256-bits-long-for-security
+    depends_on:
+      postgres-orders:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - microcommerce-network
+    restart: unless-stopped
+
+  # Interface Swagger centralisée
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    container_name: swagger-ui
+    ports:
+      - "8080:8080"
+    environment:
+      URLS: |
+        [
+          {"url": "http://localhost:8081/v3/api-docs", "name": "Service Clients"},
+          {"url": "http://localhost:8082/v3/api-docs", "name": "Service Produits"},
+          {"url": "http://localhost:8083/v3/api-docs", "name": "Service Commandes"}
+        ]
+    networks:
+      - microcommerce-network
+
+  # Interface Kafka UI
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: microcommerce-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    depends_on:
+      - kafka
+    networks:
+      - microcommerce-network
+
+volumes:
+  postgres_clients_data:
+  postgres_products_data:
+  postgres_orders_data:
+
+networks:
+  microcommerce-network:
+    driver: bridge

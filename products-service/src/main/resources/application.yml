@@ -1,0 +1,91 @@
+# Configuration pour le service Products
+server:
+  port: 8082
+
+spring:
+  application:
+    name: products-service
+  
+  profiles:
+    active: dev
+    
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5433}/${DB_NAME:microcommerce_products}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+    
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: products-service-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.microcommerce.*"
+
+# Configuration JWT
+jwt:
+  secret: ${JWT_SECRET:your-very-long-secret-key-here-must-be-at-least-256-bits-long}
+  expiration: 900000  # 15 minutes
+  refresh-expiration: 604800000  # 7 jours
+
+# Configuration Swagger
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+
+# Actuator désactivé temporairement pour éviter les problèmes Docker
+# management:
+#   endpoints:
+#     enabled-by-default: false
+#     web:
+#       exposure:
+#         include: health
+#   endpoint:
+#     health:
+#       enabled: true
+#       show-details: never
+#   metrics:
+#     enable:
+#       all: false
+
+# Logging
+logging:
+  level:
+    com.microcommerce: DEBUG
+    org.springframework.security: DEBUG
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/products-service.log
+
+---
+# Configuration Docker
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    
+logging:
+  level:
+    com.microcommerce: INFO
+    org.springframework.security: WARN
