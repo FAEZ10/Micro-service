@@ -92,7 +92,6 @@ services:
       timeout: 10s
       retries: 5
 
-  # Microservices (à activer progressivement)
   clients-service:
     build: ./clients-service
     container_name: clients-service
