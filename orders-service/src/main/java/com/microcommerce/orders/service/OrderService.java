@@ -12,6 +12,7 @@ import com.microcommerce.orders.repository.OrderItemRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -170,7 +171,29 @@ public class OrderService {
     }
 
     @Transactional(readOnly = true)
+    public Page<OrderResponse> getOrdersByClient(Long clientId, int page, int size, String sort) {
+        log.info("Récupération des commandes pour le client: {} - Page: {}, Taille: {}, Sort: {}", 
+                clientId, page, size, sort);
+        
+        Pageable pageable = PageRequest.of(page, size);
+        
+        return orderRepository.findByClientIdOrderByCreatedAtDesc(clientId, pageable)
+                .map(this::convertToResponse);
+    }
+
+    @Transactional(readOnly = true)
     public Page<OrderResponse> getAllOrders(Pageable pageable) {
+        return orderRepository.findAll(pageable)
+                .map(this::convertToResponse);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<OrderResponse> getAllOrders(int page, int size, String sort) {
+        log.info("Récupération de toutes les commandes - Page: {}, Taille: {}, Sort: {}", 
+                page, size, sort);
+        
+        Pageable pageable = PageRequest.of(page, size);
+        
         return orderRepository.findAll(pageable)
                 .map(this::convertToResponse);
     }
@@ -207,10 +230,7 @@ public class OrderService {
 
     // ===== Méthodes de sécurité =====
 
-    /**
-     * Vérifie si l'utilisateur connecté est le propriétaire de la commande
-     * Utilisé par Spring Security dans les annotations @PreAuthorize
-     */
+
     @Transactional(readOnly = true)
     public boolean isOrderOwner(Long orderId, Object principal) {
         log.debug("Vérification de propriété - Commande: {}, Principal: {}", orderId, principal);
@@ -220,21 +240,15 @@ public class OrderService {
             log.debug("Commande {} non trouvée", orderId);
             return false;
         }
-        
-        // Récupérer le clientId depuis le principal (qui est l'email de l'utilisateur)
-        // Dans notre cas, on va comparer directement avec le clientId de la commande
-        // Pour une solution plus robuste, on pourrait faire appel au service client
+        t
         
         try {
-            // Le principal contient l'email, on doit récupérer le clientId
-            // Pour l'instant, on va utiliser une approche simple en comparant avec l'email
+
             String userEmail = principal.toString();
             
-            // Si c'est un panier (CART), on compare avec le clientId directement
-            // car l'email n'est pas encore défini correctement
+
             if ("CART".equals(order.get().getStatus())) {
-                // Pour les paniers, on ne peut pas vérifier facilement
-                // On va permettre l'accès pour l'instant
+
                 log.debug("Commande en statut CART - accès autorisé");
                 return true;
             }
@@ -248,6 +262,7 @@ public class OrderService {
             return false;
         }
     }
+
 
 
     private String generateOrderNumber() {

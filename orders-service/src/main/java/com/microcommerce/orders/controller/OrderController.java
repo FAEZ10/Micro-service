@@ -9,13 +9,12 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.Hidden;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -110,21 +109,51 @@ public class OrderController {
     }
 
     @GetMapping("/my-orders")
-    @Operation(summary = "Récupérer mes commandes", 
-               description = "Récupère toutes les commandes du client connecté")
+    @Operation(
+        summary = "Récupérer mes commandes", 
+        description = """
+            Récupère toutes les commandes du client connecté avec pagination et tri.
+            
+            **Accès :** Authentifié (client connecté uniquement)
+            
+            **Paramètres de pagination :**
+            - `page` : Numéro de page (commence à 0)
+            - `size` : Nombre d'éléments par page (max 100)
+            - `sort` : Tri par propriété avec direction (ex: createdAt,desc)
+            
+            **Propriétés de tri disponibles :**
+            - `id` : ID de la commande
+            - `status` : Statut de la commande
+            - `totalAmount` : Montant total
+            - `createdAt` : Date de création
+            - `updatedAt` : Date de modification
+            
+            **Exemples d'utilisation :**
+            - Tri par date : `sort=createdAt,desc`
+            - Tri par montant : `sort=totalAmount,desc`
+            - Multi-tri : `sort=status,asc&sort=createdAt,desc`
+            """
+    )
     @ApiResponses({
         @ApiResponse(responseCode = "200", description = "Commandes récupérées avec succès"),
+        @ApiResponse(responseCode = "400", description = "Paramètres de pagination ou tri invalides"),
         @ApiResponse(responseCode = "401", description = "Non authentifié"),
         @ApiResponse(responseCode = "500", description = "Erreur interne du serveur")
     })
     public ResponseEntity<Page<OrderResponse>> getMyOrders(
-            @PageableDefault(size = 10, sort = "createdAt") Pageable pageable,
+            @Parameter(description = "Numéro de page (commence à 0)", example = "0")
+            @RequestParam(defaultValue = "0") int page,
+            @Parameter(description = "Taille de la page", example = "10")
+            @RequestParam(defaultValue = "10") int size,
+            @Parameter(description = "Tri (format: propriété,direction)", example = "createdAt,desc")
+            @RequestParam(defaultValue = "createdAt,desc") String sort,
             HttpServletRequest request) {
         
         Long clientId = (Long) request.getAttribute("userId");
-        log.info("Récupération des commandes pour le client: {}", clientId);
+        log.info("Récupération des commandes pour le client: {} - Page: {}, Taille: {}, Sort: {}", 
+                clientId, page, size, sort);
         
-        Page<OrderResponse> orders = orderService.getOrdersByClient(clientId, pageable);
+        Page<OrderResponse> orders = orderService.getOrdersByClient(clientId, page, size, sort);
         return ResponseEntity.ok(orders);
     }
 
