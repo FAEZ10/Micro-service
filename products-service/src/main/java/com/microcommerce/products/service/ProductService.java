@@ -234,28 +234,21 @@ public class ProductService {
         log.info("Récupération de l'historique de stock pour le produit ID: {}, page: {}, size: {}, sort: {}", 
                 productId, page, size, sort);
 
-        // Vérifier que le produit existe
         if (!productRepository.existsById(productId)) {
             throw new ProductNotFoundException(productId);
         }
 
-        // Parser le paramètre de tri pour l'historique
         Sort sortObj = parseStockHistorySort(sort);
         Pageable pageable = PageRequest.of(page, size, sortObj);
 
-        // Récupérer l'historique paginé
         Page<StockHistory> stockHistoryPage = stockHistoryRepository.findByProductIdOrderByCreatedAtDesc(productId, pageable);
 
         log.info("Historique de stock récupéré avec succès pour le produit ID: {}, {} entrées trouvées", 
                 productId, stockHistoryPage.getTotalElements());
 
-        // Convertir en DTO de réponse
         return stockHistoryPage.map(StockHistoryResponse::fromEntity);
     }
 
-    /**
-     * Parse le paramètre de tri spécifique à l'historique de stock
-     */
     private Sort parseStockHistorySort(String sort) {
         if (sort == null || sort.trim().isEmpty()) {
             return Sort.by("createdAt").descending();
@@ -279,9 +272,6 @@ public class ProductService {
         }
     }
     
-    /**
-     * Vérifie si la propriété de tri est valide pour l'historique de stock
-     */
     private boolean isValidStockHistorySortProperty(String property) {
         return List.of("id", "createdAt", "movementType", "quantity", "previousStock", "newStock", "orderId").contains(property);
     }
@@ -343,9 +333,6 @@ public class ProductService {
 
     // ===== Order Event Processing =====
 
-    /**
-     * Traite la réduction de stock suite à la validation d'une commande
-     */
     public void processOrderStockReduction(List<OrderEvent.OrderItemEvent> items, Long orderId) {
         log.info("Traitement de la réduction de stock pour la commande ID: {}", orderId);
         
@@ -360,16 +347,13 @@ public class ProductService {
                     log.error("Stock insuffisant pour le produit ID: {}, stock disponible: {}, quantité demandée: {}", 
                              item.getProductId(), previousStock, item.getQuantity());
                     
-                    // Publier un événement de stock insuffisant
                     publishStockInsufficientEvent(orderId, item, previousStock);
                     continue;
                 }
                 
-                // Réduire le stock
                 product.reserveStock(item.getQuantity());
                 productRepository.save(product);
                 
-                // Créer l'historique
                 createStockHistory(
                     product.getId(), 
                     StockHistory.MovementType.ORDER_REDUCTION, 
@@ -385,15 +369,11 @@ public class ProductService {
                         
             } catch (Exception e) {
                 log.error("Erreur lors de la réduction de stock pour le produit ID: {}", item.getProductId(), e);
-                // Publier un événement d'erreur
                 publishStockErrorEvent(orderId, item, e.getMessage());
             }
         }
     }
 
-    /**
-     * Restaure le stock suite à l'annulation d'une commande
-     */
     public void restoreOrderStock(List<OrderEvent.OrderItemEvent> items, Long orderId) {
         log.info("Restauration du stock pour la commande annulée ID: {}", orderId);
         
@@ -404,11 +384,9 @@ public class ProductService {
                 
                 int previousStock = product.getStockAvailable();
                 
-                // Restaurer le stock
                 product.addStock(item.getQuantity());
                 productRepository.save(product);
                 
-                // Créer l'historique
                 createStockHistory(
                     product.getId(), 
                     StockHistory.MovementType.ORDER_CANCELLATION, 
@@ -428,9 +406,6 @@ public class ProductService {
         }
     }
 
-    /**
-     * Crée une entrée dans l'historique des mouvements de stock
-     */
     private void createStockHistory(Long productId, StockHistory.MovementType movementType, 
                                   Integer quantity, Integer previousStock, Integer newStock, 
                                   Long orderId, String reason) {
@@ -448,9 +423,6 @@ public class ProductService {
         log.debug("Historique de stock créé: {}", stockHistory);
     }
 
-    /**
-     * Publie un événement de stock insuffisant
-     */
     private void publishStockInsufficientEvent(Long orderId, OrderEvent.OrderItemEvent item, Integer availableStock) {
         try {
             // Créer l'événement de stock insuffisant
@@ -462,9 +434,7 @@ public class ProductService {
         }
     }
 
-    /**
-     * Publie un événement d'erreur de stock
-     */
+
     private void publishStockErrorEvent(Long orderId, OrderEvent.OrderItemEvent item, String errorMessage) {
         try {
             // Créer l'événement d'erreur
