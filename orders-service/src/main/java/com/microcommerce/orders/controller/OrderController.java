@@ -100,7 +100,7 @@ public class OrderController {
         @ApiResponse(responseCode = "404", description = "Commande non trouvée"),
         @ApiResponse(responseCode = "500", description = "Erreur interne du serveur")
     })
-    @PreAuthorize("hasRole('ADMIN') or @orderService.isOrderOwner(#orderId, authentication.name)")
+    @PreAuthorize("hasRole('ADMIN') or @orderService.isOrderOwner(#orderId, authentication.principal)")
     public ResponseEntity<OrderResponse> getOrder(
             @Parameter(description = "ID de la commande") @PathVariable Long orderId) {
         
@@ -138,7 +138,7 @@ public class OrderController {
         @ApiResponse(responseCode = "404", description = "Commande non trouvée"),
         @ApiResponse(responseCode = "500", description = "Erreur interne du serveur")
     })
-    @PreAuthorize("hasRole('ADMIN') or @orderService.isOrderOwner(#orderId, authentication.name)")
+    @PreAuthorize("hasRole('ADMIN') or @orderService.isOrderOwner(#orderId, authentication.principal)")
     public ResponseEntity<OrderResponse> validateOrder(
             @Parameter(description = "ID de la commande à valider") @PathVariable Long orderId) {
         
