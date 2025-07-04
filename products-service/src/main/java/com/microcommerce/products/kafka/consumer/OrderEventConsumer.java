@@ -1,6 +1,5 @@
 package com.microcommerce.products.kafka.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microcommerce.products.kafka.event.OrderEvent;
 import com.microcommerce.products.service.ProductService;
 import lombok.RequiredArgsConstructor;
@@ -18,15 +17,14 @@ import org.springframework.stereotype.Service;
 public class OrderEventConsumer {
 
     private final ProductService productService;
-    private final ObjectMapper objectMapper;
 
     @KafkaListener(
         topics = "order-events",
         groupId = "products-service-group",
-        containerFactory = "kafkaListenerContainerFactory"
+        containerFactory = "orderEventKafkaListenerContainerFactory"
     )
     public void handleOrderEvent(
-            @Payload String eventPayload,
+            @Payload OrderEvent orderEvent,
             @Header(KafkaHeaders.RECEIVED_TOPIC) String topic,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.RECEIVED_KEY) Object key,
@@ -34,28 +32,22 @@ public class OrderEventConsumer {
         
         try {
             log.info("Received order event from topic: {}, partition: {}, key: {}", topic, partition, key);
-            log.debug("Order event payload: {}", eventPayload);
+            log.info("Order event details - Type: {}, OrderId: {}, Items count: {}", 
+                    orderEvent.getEventType(), orderEvent.getOrderId(), 
+                    orderEvent.getItems() != null ? orderEvent.getItems().size() : 0);
+            log.debug("Order event payload: {}", orderEvent);
 
-            // Désérialiser l'événement
-            OrderEvent orderEvent = objectMapper.readValue(eventPayload, OrderEvent.class);
-            
-            // Traiter l'événement selon son type
             processOrderEvent(orderEvent);
 
-            // Acknowledge successful processing
             acknowledgment.acknowledge();
             log.info("Successfully processed order event: {} for order ID: {}", 
                     orderEvent.getEventType(), orderEvent.getOrderId());
 
         } catch (Exception e) {
-            log.error("Error processing order event from topic: {}, payload: {}", topic, eventPayload, e);
-            // Don't acknowledge - message will be retried
+            log.error("Error processing order event from topic: {}, event: {}", topic, orderEvent, e);
         }
     }
 
-    /**
-     * Traite l'événement de commande selon son type
-     */
     private void processOrderEvent(OrderEvent orderEvent) {
         if (orderEvent.getItems() == null || orderEvent.getItems().isEmpty()) {
             log.warn("Événement de commande sans articles: {}", orderEvent.getEventType());
